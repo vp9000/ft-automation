@@ -6,11 +6,9 @@ import { v4 } from "uuid";
 import firebaseCert from "../cert.json";
 import { ScheduledFast } from "./types";
 
-initializeApp({
-  credential: cert(firebaseCert as ServiceAccount),
-});
+let db: FirebaseFirestore.Firestore;
 
-const db = getFirestore();
+const COLLECTION = "scheduled_fasts";
 
 const sessions: Pick<ScheduledFast, "label" | "duration">[] = [
   { label: "Daily 16:8 IF", duration: 16 },
@@ -20,7 +18,31 @@ const sessions: Pick<ScheduledFast, "label" | "duration">[] = [
   { label: "Daily OMAD (23:1)", duration: 23 },
 ];
 
-const generateDailyData = () => {
+const deactivatePreviousSessions = async () => {
+  try {
+    const batch = db.batch();
+
+    const docRef = db.collection(COLLECTION).where("isActive", "==", true);
+    const snapshot = await docRef.get();
+
+    const activeSessions = snapshot.docs.map(
+      (doc) => doc.data() as ScheduledFast
+    );
+
+    activeSessions.forEach((session) => {
+      const deactivatedSession = { ...session, isActive: false };
+      const docRef = db.collection(COLLECTION).doc(session.id);
+      batch.set(docRef, deactivatedSession);
+    });
+
+    await batch.commit();
+    console.log("Deactivated previous sessions ✅");
+  } catch (error) {
+    console.error("Error deactivating previous sessions ❌", error);
+  }
+};
+
+const generateDailySessions = () => {
   const dt = new Date();
   const created = dt.getTime();
   const joinDeadline = add(dt, { days: 1 }).getTime();
@@ -28,7 +50,7 @@ const generateDailyData = () => {
   const fasts: ScheduledFast[] = sessions.map((session) => ({
     ...session,
     id: v4(),
-    creatorId: "admin",
+    creatorId: "service_account",
     isActive: true,
     participants: [],
     visibility: "public",
@@ -39,21 +61,35 @@ const generateDailyData = () => {
   return fasts;
 };
 
-const addDataToFirestore = async () => {
+const addNewSessionsToFirestore = async () => {
   try {
-    const fasts = generateDailyData();
     const batch = db.batch();
+    const fasts = generateDailySessions();
 
     fasts.forEach((fast) => {
-      const docRef = db.collection("scheduled_fasts").doc(fast.id);
+      const docRef = db.collection(COLLECTION).doc(fast.id);
       batch.set(docRef, fast);
     });
 
     await batch.commit();
-    console.log("Batch commit successful.");
+    console.log("Added new sessions ✅");
   } catch (error) {
-    console.error("Error adding data to Firestore:", error);
+    console.error("Error adding new sessions to Firestore ❌", error);
   }
 };
 
-addDataToFirestore();
+const main = async () => {
+  console.log("Initializing app ⌛️");
+  initializeApp({
+    credential: cert(firebaseCert as ServiceAccount),
+  });
+  db = getFirestore();
+
+  console.log("Refreshing scheduled fasts ⌛️");
+  await deactivatePreviousSessions();
+  await addNewSessionsToFirestore();
+
+  console.log("Done! 🙌");
+};
+
+main();
