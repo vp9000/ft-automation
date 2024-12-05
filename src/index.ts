@@ -1,6 +1,10 @@
-import { initializeApp, cert, ServiceAccount } from "firebase-admin/app";
+import { add } from "date-fns";
+import { cert, initializeApp, ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { v4 } from "uuid";
+
 import firebaseCert from "../cert.json";
+import { ScheduledFast } from "./types";
 
 initializeApp({
   credential: cert(firebaseCert as ServiceAccount),
@@ -8,25 +12,48 @@ initializeApp({
 
 const db = getFirestore();
 
-// Function to generate daily data
+const sessions: Pick<ScheduledFast, "label" | "duration">[] = [
+  { label: "Daily 16:8 IF", duration: 16 },
+  { label: "Daily 18:6 IF", duration: 18 },
+  { label: "Daily 20:4 IF", duration: 20 },
+  { label: "Daily 22:2 IF", duration: 22 },
+  { label: "Daily OMAD (23:1)", duration: 23 },
+];
+
 const generateDailyData = () => {
-  const now = new Date();
-  return {
-    date: now.toISOString(),
-    message: `Daily message for ${now.toDateString()}`,
-  };
+  const dt = new Date();
+  const created = dt.getTime();
+  const joinDeadline = add(dt, { days: 1 }).getTime();
+
+  const fasts: ScheduledFast[] = sessions.map((session) => ({
+    ...session,
+    id: v4(),
+    creatorId: "admin",
+    isActive: true,
+    participants: [],
+    visibility: "public",
+    created,
+    joinDeadline,
+  }));
+
+  return fasts;
 };
 
-// Add data to Firestore
 const addDataToFirestore = async () => {
   try {
-    const dailyData = generateDailyData();
-    const docRef = await db.collection("daily_updates").add(dailyData);
-    console.log(`Document added with ID: ${docRef.id}`);
+    const fasts = generateDailyData();
+    const batch = db.batch();
+
+    fasts.forEach((fast) => {
+      const docRef = db.collection("scheduled_fasts").doc(fast.id);
+      batch.set(docRef, fast);
+    });
+
+    await batch.commit();
+    console.log("Batch commit successful.");
   } catch (error) {
-    console.error("Error adding document: ", error);
+    console.error("Error adding data to Firestore:", error);
   }
 };
 
-// Execute the function
 addDataToFirestore();
