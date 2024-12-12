@@ -42,6 +42,36 @@ const deactivatePreviousSessions = async () => {
   }
 };
 
+const cleanUpDeactivatedSessions = async () => {
+  try {
+    /**
+     * In the future, implement an archive feature to store deactivated sessions
+     * in a local database.
+     *
+     * For now, we'll just delete them.
+     */
+
+    const batch = db.batch();
+
+    const docRef = db.collection(COLLECTION).where("isActive", "==", false);
+    const snapshot = await docRef.get();
+
+    const deactivatedSessions = snapshot.docs.map(
+      (doc) => doc.data() as ScheduledFast
+    );
+
+    deactivatedSessions.forEach((session) => {
+      const docRef = db.collection(COLLECTION).doc(session.id);
+      batch.delete(docRef);
+    });
+
+    await batch.commit();
+    console.log("Cleaned up deactivated sessions ✅");
+  } catch (error) {
+    console.error("Error cleaning up deactivated sessions ❌", error);
+  }
+};
+
 const generateDailySessions = () => {
   const dt = new Date();
   const created = dt.getTime();
@@ -87,6 +117,7 @@ const main = async () => {
 
   console.log("Refreshing scheduled fasts ⌛️");
   await deactivatePreviousSessions();
+  await cleanUpDeactivatedSessions();
   await addNewSessionsToFirestore();
 
   console.log("Done! 🙌");
