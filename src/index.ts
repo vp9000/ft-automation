@@ -8,7 +8,8 @@ import { ScheduledFast } from "./types";
 
 let db: FirebaseFirestore.Firestore;
 
-const COLLECTION = "scheduled_fasts";
+const SCHEDULED_FAST_COLLECTION = "scheduled_fasts";
+const COMMUNITY_FAST_COLLECTION = "community_fasts";
 
 const sessions: Pick<ScheduledFast, "label" | "duration">[] = [
   { label: "Daily 16:8 IF", duration: 16 },
@@ -18,11 +19,13 @@ const sessions: Pick<ScheduledFast, "label" | "duration">[] = [
   { label: "Daily OMAD (23:1)", duration: 23 },
 ];
 
-const deactivatePreviousSessions = async () => {
+const deactivatePreviousScheduledFasts = async () => {
   try {
     const batch = db.batch();
 
-    const docRef = db.collection(COLLECTION).where("isActive", "==", true);
+    const docRef = db
+      .collection(SCHEDULED_FAST_COLLECTION)
+      .where("isActive", "==", true);
     const snapshot = await docRef.get();
 
     const activeSessions = snapshot.docs.map(
@@ -31,18 +34,18 @@ const deactivatePreviousSessions = async () => {
 
     activeSessions.forEach((session) => {
       const deactivatedSession = { ...session, isActive: false };
-      const docRef = db.collection(COLLECTION).doc(session.id);
+      const docRef = db.collection(SCHEDULED_FAST_COLLECTION).doc(session.id);
       batch.set(docRef, deactivatedSession);
     });
 
     await batch.commit();
-    console.log("Deactivated previous sessions ✅");
+    console.log("Deactivated previous scheduled fasts ✅");
   } catch (error) {
-    console.error("Error deactivating previous sessions ❌", error);
+    console.error("Error deactivating previous scheduled fasts ❌", error);
   }
 };
 
-const cleanUpDeactivatedSessions = async () => {
+const cleanUpDeactivatedScheduledFasts = async () => {
   try {
     /**
      * In the future, implement an archive feature to store deactivated sessions
@@ -53,7 +56,9 @@ const cleanUpDeactivatedSessions = async () => {
 
     const batch = db.batch();
 
-    const docRef = db.collection(COLLECTION).where("isActive", "==", false);
+    const docRef = db
+      .collection(SCHEDULED_FAST_COLLECTION)
+      .where("isActive", "==", false);
     const snapshot = await docRef.get();
 
     const deactivatedSessions = snapshot.docs.map(
@@ -61,18 +66,18 @@ const cleanUpDeactivatedSessions = async () => {
     );
 
     deactivatedSessions.forEach((session) => {
-      const docRef = db.collection(COLLECTION).doc(session.id);
+      const docRef = db.collection(SCHEDULED_FAST_COLLECTION).doc(session.id);
       batch.delete(docRef);
     });
 
     await batch.commit();
-    console.log("Cleaned up deactivated sessions ✅");
+    console.log("Cleaned up deactivated scheduled fasts ✅");
   } catch (error) {
-    console.error("Error cleaning up deactivated sessions ❌", error);
+    console.error("Error cleaning up deactivated scheduled fasts ❌", error);
   }
 };
 
-const generateDailySessions = () => {
+const generateScheduledFasts = () => {
   const dt = new Date();
   const created = dt.getTime();
   const joinDeadline = add(dt, { days: 1 }).getTime();
@@ -94,17 +99,52 @@ const generateDailySessions = () => {
 const addNewSessionsToFirestore = async () => {
   try {
     const batch = db.batch();
-    const fasts = generateDailySessions();
+    const fasts = generateScheduledFasts();
 
     fasts.forEach((fast) => {
-      const docRef = db.collection(COLLECTION).doc(fast.id);
+      const docRef = db.collection(SCHEDULED_FAST_COLLECTION).doc(fast.id);
       batch.set(docRef, fast);
     });
 
     await batch.commit();
-    console.log("Added new sessions ✅");
+    console.log("Added new scheduled fasts ✅");
   } catch (error) {
-    console.error("Error adding new sessions to Firestore ❌", error);
+    console.error("Error adding new scheduled fasts to Firestore ❌", error);
+  }
+};
+
+const cleanUpExpiredCommunitySessions = async () => {
+  try {
+    /**
+     * In the future, implement an archive feature to store deactivated sessions
+     * in a local database.
+     *
+     * For now, we'll just delete them.
+     */
+
+    const batch = db.batch();
+    const now = new Date().getTime();
+
+    const docRef = db.collection(COMMUNITY_FAST_COLLECTION);
+    const snapshot = await docRef.get();
+
+    const expiredSessions = snapshot.docs.map(
+      (doc) => doc.data() as ScheduledFast
+    );
+
+    expiredSessions.forEach((session) => {
+      if (now < session.joinDeadline) {
+        return;
+      }
+
+      const docRef = db.collection(COMMUNITY_FAST_COLLECTION).doc(session.id);
+      batch.delete(docRef);
+    });
+
+    await batch.commit();
+    console.log("Cleaned up expired community fasts ✅");
+  } catch (error) {
+    console.error("Could not clean up expired community fasts ❌", error);
   }
 };
 
@@ -115,10 +155,13 @@ const main = async () => {
   });
   db = getFirestore();
 
-  console.log("Refreshing scheduled fasts ⌛️");
-  await deactivatePreviousSessions();
-  await cleanUpDeactivatedSessions();
+  console.log("Refreshing scheduled fasts.. ⌛️");
+  await deactivatePreviousScheduledFasts();
+  await cleanUpDeactivatedScheduledFasts();
   await addNewSessionsToFirestore();
+
+  console.log("Processing community fasts.. ⌛️");
+  await cleanUpExpiredCommunitySessions();
 
   console.log("Done! 🙌");
 };
