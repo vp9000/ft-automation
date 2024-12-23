@@ -3,8 +3,10 @@ import { cert, initializeApp, ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { v4 } from "uuid";
 
-import firebaseCert from "../cert.json";
+import { logger } from "./utils";
 import { ScheduledFast } from "./types";
+
+import firebaseCert from "../cert.json";
 
 let db: FirebaseFirestore.Firestore;
 
@@ -39,9 +41,9 @@ const deactivatePreviousScheduledFasts = async () => {
     });
 
     await batch.commit();
-    console.log("Deactivated previous scheduled fasts ✅");
+    logger.info("Deactivated previous scheduled fasts ✅");
   } catch (error) {
-    console.error("Error deactivating previous scheduled fasts ❌", error);
+    logger.error("Error deactivating previous scheduled fasts ❌", error);
   }
 };
 
@@ -71,9 +73,9 @@ const cleanUpDeactivatedScheduledFasts = async () => {
     });
 
     await batch.commit();
-    console.log("Cleaned up deactivated scheduled fasts ✅");
+    logger.info("Cleaned up deactivated scheduled fasts ✅");
   } catch (error) {
-    console.error("Error cleaning up deactivated scheduled fasts ❌", error);
+    logger.error("Error cleaning up deactivated scheduled fasts ❌", error);
   }
 };
 
@@ -107,9 +109,9 @@ const addNewSessionsToFirestore = async () => {
     });
 
     await batch.commit();
-    console.log("Added new scheduled fasts ✅");
+    logger.info("Added new scheduled fasts ✅");
   } catch (error) {
-    console.error("Error adding new scheduled fasts to Firestore ❌", error);
+    logger.error("Error adding new scheduled fasts to Firestore ❌", error);
   }
 };
 
@@ -142,28 +144,28 @@ const cleanUpExpiredCommunitySessions = async () => {
     });
 
     await batch.commit();
-    console.log("Cleaned up expired community fasts ✅");
+    logger.info("Cleaned up expired community fasts ✅");
   } catch (error) {
-    console.error("Could not clean up expired community fasts ❌", error);
+    logger.error("Could not clean up expired community fasts ❌", error);
   }
 };
 
 const main = async () => {
-  console.log("Initializing app ⌛️");
+  logger.info("Initializing app ⌛️");
   initializeApp({
     credential: cert(firebaseCert as ServiceAccount),
   });
   db = getFirestore();
 
-  console.log("Refreshing scheduled fasts.. ⌛️");
+  logger.info("Refreshing scheduled fasts.. ⌛️");
   await deactivatePreviousScheduledFasts();
   await cleanUpDeactivatedScheduledFasts();
   await addNewSessionsToFirestore();
 
-  console.log("Processing community fasts.. ⌛️");
+  logger.info("Processing community fasts.. ⌛️");
   await cleanUpExpiredCommunitySessions();
 
-  console.log("Done! 🙌");
+  logger.info("Done! 🙌");
 };
 
 main();
