@@ -11,3 +11,11 @@ export type ScheduledFast = {
   created: number;
   joinDeadline: number;
 };
+
+export type Friend = {
+  activeFastId: string;
+  friendsSince: number;
+  id: string;
+  name: string;
+  status: "friends" | "request_sent" | "request_received";
+};
